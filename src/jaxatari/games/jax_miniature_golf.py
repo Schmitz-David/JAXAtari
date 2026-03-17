@@ -1,21 +1,22 @@
 from functools import partial
 import os
-from typing import NamedTuple, Tuple
+from typing import Tuple
 import jax.lax
 import jax.numpy as jnp
 import chex
 import numpy as np
 from queue import Queue
+from flax import struct
 
 import jaxatari.spaces as spaces
 from jaxatari.renderers import JAXGameRenderer
 from jaxatari.rendering import jax_rendering_utils as render_utils
-from jaxatari.environment import JaxEnvironment, JAXAtariAction as Action
+from jaxatari.environment import JaxEnvironment, JAXAtariAction as Action, ObjectObservation
 
 
-def get_default_asset_config() -> list:
+def _get_default_asset_config() -> tuple:
     """Returns the declarative manifest of all default assets for the game."""
-    return [
+    return (
         {'name': 'background', 'type': 'background', 'file': 'background.npy'},
         {'name': 'player', 'type': 'single', 'file': 'player.npy'},
         {'name': 'ball', 'type': 'single', 'file': 'ball.npy'},
@@ -32,17 +33,10 @@ def get_default_asset_config() -> list:
         {'name': 'level_7', 'type': 'single', 'file': 'level_7.npy'},
         {'name': 'level_8', 'type': 'single', 'file': 'level_8.npy'},
         {'name': 'level_9', 'type': 'single', 'file': 'level_9.npy'},
-    ]
+    )
 
 
-class EntityPosition(NamedTuple):
-    x: chex.Array
-    y: chex.Array
-    width: chex.Array
-    height: chex.Array
-
-
-def get_score_mask(wall_layout: chex.Array, hole: EntityPosition, ball_width: int, ball_height: int) -> chex.Array:
+def get_score_mask(wall_layout: chex.Array, hole: ObjectObservation, ball_width: int, ball_height: int) -> chex.Array:
     dist = np.zeros_like(wall_layout) + np.inf
     q: Queue[Tuple[int, int]] = Queue(maxsize=int(np.prod(wall_layout.shape)))
     for y in range(hole.y - ball_height + 1, hole.y + hole.height):
@@ -68,7 +62,7 @@ def get_score_mask(wall_layout: chex.Array, hole: EntityPosition, ball_width: in
     return 1 / (1 + jnp.array(dist))
 
 
-class MiniatureGolfConstants(NamedTuple):
+class MiniatureGolfConstants(struct.PyTreeNode):
     WIDTH: int = 160
     HEIGHT: int = 210
     BALL_START_X: chex.Array = jnp.array([133, 78, 6, 8, 26, 8, 8, 138, 128])
@@ -131,11 +125,11 @@ class MiniatureGolfConstants(NamedTuple):
     SCORE_MASK_LEVEL_8: chex.Array = get_score_mask(WALL_LAYOUT_LEVEL_8, EntityPosition(HOLE_X[7], HOLE_Y[7], HOLE_SIZE[0], HOLE_SIZE[1]), BALL_SIZE[0], BALL_SIZE[1])
     SCORE_MASK_LEVEL_9: chex.Array = get_score_mask(WALL_LAYOUT_LEVEL_9, EntityPosition(HOLE_X[8], HOLE_Y[8], HOLE_SIZE[0], HOLE_SIZE[1]), BALL_SIZE[0], BALL_SIZE[1])
 
-    ASSET_CONFIG: list = get_default_asset_config()
+    ASSET_CONFIG: tuple = struct.field(pytree_node=False, default_factory=_get_default_asset_config())
 
 
 # immutable state container
-class MiniatureGolfState(NamedTuple):
+class MiniatureGolfState(struct.PyTreeNode):
     player_x: chex.Array
     player_y: chex.Array
     ball_x: chex.Array
@@ -159,7 +153,7 @@ class MiniatureGolfState(NamedTuple):
     right_number: chex.Array
 
 
-class MiniatureGolfObservation(NamedTuple):
+class MiniatureGolfObservation(struct.PyTreeNode):
     player: EntityPosition
     hole: EntityPosition
     ball: EntityPosition
@@ -168,7 +162,7 @@ class MiniatureGolfObservation(NamedTuple):
     wall_layout: chex.Array
 
 
-class MiniatureGolfInfo(NamedTuple):
+class MiniatureGolfInfo(struct.PyTreeNode):
     pass
 
 
